@@ -1,0 +1,117 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Creates an ec2 instance then installs docker onto it.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          Default: Compute Configuration
+        Parameters:
+          - InstanceTypeParameter
+          - InstanceImageIdParameter
+          - KeyPairParameter
+          - SecurityGroupParameter
+
+      - Label:
+          Default: Network Configuration
+        Parameters:
+          - VpcBlockParameter
+          - VpcSubnetParameter
+
+####################################################
+# Parameters
+
+Parameters:
+  InstanceTypeParameter:
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t2.nano
+    Description: Enter t2.nano. Default is t2.micro.
+
+  InstanceImageIdParameter:
+    Type: String
+    Default: ami-080e1f13689e07408
+    AllowedValues:
+      - ami-080e1f13689e07408
+      - ami-0c101f26f147fa7fd
+    Description: Choose an Amazon Machine Image(AMI)
+
+  KeyPairParameter:
+    Type: String
+    Description: Enter your Keypair name.
+
+  VpcBlockParameter:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: Vpc Cidr Block
+
+  VpcSubnetParameter:
+    Type: String
+    Default: 10.0.0.0/24
+    Description: VPC CIDR Subnet
+
+  SecurityGroupParameter:
+    Type: String
+    Default: vpc-051ed554342f4001f
+    Description: Security Group VpcId
+
+####################################################
+# Resources
+
+Resources:
+  dockerKeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: !Ref KeyPairParameter
+
+  dockerVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcBlockParameter
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+
+  dockerVpcSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref dockerVpc
+      CidrBlock: !Ref VpcSubnetParameter
+
+  dockerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for the EC2 instance
+      VpcId: !Ref SecurityGroupParameter
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          CidrIp: 0.0.0.0/0
+
+  dockerEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceTypeParameter
+      ImageId: !Ref InstanceImageIdParameter
+      KeyName: !Ref dockerKeyPair
+      SecurityGroupIds:
+        - !Ref dockerSecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          sudo apt update
+          sudo apt install docker.io -y
+          sudo systemctl start docker
+          sudo usermod -aG docker ubuntu
+
+  dockerEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref dockerEC2
